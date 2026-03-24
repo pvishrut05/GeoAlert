@@ -4,7 +4,6 @@
     "slug": "geo-alarm",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
     "splash": {
       "backgroundColor": "#000000"
@@ -15,7 +14,10 @@
       "infoPlist": {
         "NSLocationAlwaysAndWhenInUseUsageDescription": "Geo Alarm needs your location to trigger alarms when you arrive at or leave a place.",
         "NSLocationWhenInUseUsageDescription": "Geo Alarm needs your location to trigger alarms when you arrive at or leave a place.",
-        "UIBackgroundModes": ["location", "fetch"]
+        "UIBackgroundModes": [
+          "location",
+          "fetch"
+        ]
       }
     },
     "android": {
@@ -42,7 +44,9 @@
         {
           "sounds": []
         }
-      ]
+      ],
+      "expo-asset",
+      "expo-font"
     ]
   }
 }
