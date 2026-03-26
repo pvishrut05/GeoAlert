@@ -1,16 +1,21 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   View,
   Text,
   FlatList,
-  TouchableOpacity,
   StyleSheet,
+  TouchableOpacity,
 } from 'react-native';
+import {PlaceRow} from '../components/PlaceRow';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
 import { ScreenContainer, SearchBar, SectionHeader } from '../components';
-import { searchLocations } from '../services';
-import { LocationResult } from '../types';
+import {
+  searchLocalTransitPlaces,
+  searchPlaces,
+  getDefaultStations,
+} from '../services/locationSearch';
+import { SelectedPlace } from '../types';
 import { theme } from '../constants';
 import { RootStackParamList } from '../navigation/types';
 
@@ -19,72 +24,65 @@ type Props = {
   route: RouteProp<RootStackParamList, 'LocationPicker'>;
 };
 
-const recentPlaces: LocationResult[] = [
-  {
-    name: 'Union Station',
-    address: '225 S Canal St, Chicago, IL',
-    latitude: 41.8786,
-    longitude: -87.6402,
-  },
-  {
-    name: 'UIC Campus',
-    address: '1200 W Harrison St, Chicago, IL',
-    latitude: 41.8697,
-    longitude: -87.6475,
-  },
-];
-
 export function LocationPickerScreen({ navigation, route }: Props) {
   const [query, setQuery] = useState('');
-  const [results, setResults] = useState<LocationResult[]>([]);
+  const [results, setResults] = useState<SelectedPlace[]>([]);
+  const [defaults, setDefaults] = useState<SelectedPlace[]>([]);
   const [searching, setSearching] = useState(false);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const onSelect = (route.params as any)?.onSelect;
 
-  const handleSearch = useCallback(async (text: string) => {
+  // Load default stations on mount
+  useEffect(() => {
+    setDefaults(getDefaultStations());
+  }, []);
+
+  // Debounced search
+  const handleSearch = useCallback((text: string) => {
     setQuery(text);
-    if (text.trim().length < 2) {
+
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+
+    const q = text.trim();
+    if (q.length < 1) {
       setResults([]);
+      setSearching(false);
       return;
     }
-    setSearching(true);
-    const res = await searchLocations(text);
-    setResults(res);
-    setSearching(false);
+
+    // Instant local search (synchronous, fast)
+    const localResults = searchLocalTransitPlaces(q);
+    setResults(localResults);
+
+    // Debounced async search for external fallback
+    if (localResults.length < 3 && q.length >= 2) {
+      setSearching(true);
+      debounceRef.current = setTimeout(async () => {
+        const merged = await searchPlaces(q);
+        setResults(merged);
+        setSearching(false);
+      }, 300);
+    }
   }, []);
 
   const handleSelect = useCallback(
-    (location: LocationResult) => {
+    (place: SelectedPlace) => {
       if (onSelect) {
-        onSelect(location);
+        onSelect(place);
       }
       navigation.goBack();
     },
     [navigation, onSelect]
   );
 
-  const renderLocationRow = ({ item }: { item: LocationResult }) => (
-    <TouchableOpacity
-      style={styles.locationRow}
-      activeOpacity={0.6}
-      onPress={() => handleSelect(item)}
-    >
-      <View style={styles.pinIcon}>
-        <Text style={styles.pinText}>📍</Text>
-      </View>
-      <View style={styles.locationInfo}>
-        <Text style={styles.locationName} numberOfLines={1}>
-          {item.name}
-        </Text>
-        <Text style={styles.locationAddress} numberOfLines={1}>
-          {item.address}
-        </Text>
-      </View>
-    </TouchableOpacity>
-  );
-
-  const displayData = query.trim().length >= 2 ? results : recentPlaces;
-  const sectionTitle = query.trim().length >= 2 ? 'Results' : 'Recent Places';
+  const hasQuery = query.trim().length >= 1;
+  const displayData = hasQuery ? results : defaults;
+  const sectionTitle = hasQuery
+    ? results.length > 0
+      ? 'Stations'
+      : ''
+    : 'Popular Stations';
 
   return (
     <ScreenContainer>
@@ -101,23 +99,41 @@ export function LocationPickerScreen({ navigation, route }: Props) {
       <SearchBar
         value={query}
         onChangeText={handleSearch}
-        placeholder="Search for a place..."
+        placeholder="Station name, line, or city..."
         autoFocus
       />
 
+      {/* Section header */}
+      {sectionTitle ? <SectionHeader title={sectionTitle} /> : null}
+
       {/* Results */}
-      <SectionHeader title={sectionTitle} />
       <FlatList
         data={displayData}
-        keyExtractor={(item) => `${item.latitude}-${item.longitude}`}
-        renderItem={renderLocationRow}
+        keyExtractor={(item) => item.id}
+        renderItem={({ item, index }) => (
+          <PlaceRow
+            place={item}
+            onPress={handleSelect}
+            isLast={index === displayData.length - 1}
+          />
+        )}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
         contentContainerStyle={styles.list}
         ListEmptyComponent={
-          searching ? (
-            <Text style={styles.emptyText}>Searching...</Text>
-          ) : query.trim().length >= 2 ? (
-            <Text style={styles.emptyText}>No results found</Text>
+          hasQuery ? (
+            <View style={styles.emptyContainer}>
+              {searching ? (
+                <Text style={styles.emptyText}>Searching...</Text>
+              ) : (
+                <>
+                  <Text style={styles.emptyText}>No stations found</Text>
+                  <Text style={styles.emptyHint}>
+                    Try a station name, line code, or city
+                  </Text>
+                </>
+              )}
+            </View>
           ) : null
         }
       />
@@ -145,42 +161,19 @@ const styles = StyleSheet.create({
   list: {
     paddingBottom: theme.spacing.xxxl,
   },
-  locationRow: {
-    flexDirection: 'row',
+  emptyContainer: {
     alignItems: 'center',
-    paddingVertical: 14,
-    paddingHorizontal: theme.spacing.xl,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: theme.colors.separator,
-  },
-  pinIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.04)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-  },
-  pinText: {
-    fontSize: 16,
-  },
-  locationInfo: {
-    flex: 1,
-  },
-  locationName: {
-    fontSize: theme.font.size.body,
-    color: theme.colors.text,
-    marginBottom: 2,
-  },
-  locationAddress: {
-    fontSize: theme.font.size.caption,
-    color: theme.colors.textSecondary,
+    paddingTop: 48,
   },
   emptyText: {
     fontSize: theme.font.size.body,
     color: theme.colors.textSecondary,
     textAlign: 'center',
-    marginTop: theme.spacing.xxxl,
+  },
+  emptyHint: {
+    fontSize: theme.font.size.caption,
+    color: theme.colors.textTertiary,
+    textAlign: 'center',
+    marginTop: 6,
   },
 });

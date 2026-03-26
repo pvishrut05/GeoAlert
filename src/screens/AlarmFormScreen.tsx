@@ -115,14 +115,20 @@ export function AlarmFormScreen(props: Props) {
 
   const handleLocationPick = useCallback(() => {
     navigation.navigate('LocationPicker', {
-      onSelect: (result) => {
-        setLocationName(result.name);
-        setAddress(result.address);
+      onSelect: (result: any) => {
+        // SelectedPlace uses 'label' and 'locationName'
+        const name = result.locationName || result.label || result.name || '';
+        setLocationName(name);
+        setAddress(result.address || '');
         setLatitude(result.latitude);
         setLongitude(result.longitude);
+        // Auto-fill label if empty
+        if (!label.trim() && name) {
+          setLabel(name);
+        }
       },
     } as any);
-  }, [navigation]);
+  }, [navigation, label]);
 
   const triggerIndex = triggerType === 'arriving' ? 0 : 1;
 
@@ -172,15 +178,34 @@ export function AlarmFormScreen(props: Props) {
             activeOpacity={0.6}
             onPress={handleLocationPick}
           >
-            <Text
-              style={[
-                styles.input,
-                !address && { color: theme.colors.textTertiary },
-              ]}
-              numberOfLines={1}
-            >
-              {address || 'Search for a place...'}
-            </Text>
+            <View style={{ flex: 1, paddingVertical: 10 }}>
+              {locationName ? (
+                <>
+                  <Text style={styles.input} numberOfLines={1}>
+                    {locationName}
+                  </Text>
+                  {!!address && (
+                    <Text
+                      style={{
+                        fontSize: theme.font.size.caption,
+                        color: theme.colors.textSecondary,
+                        marginTop: 2,
+                      }}
+                      numberOfLines={1}
+                    >
+                      {address}
+                    </Text>
+                  )}
+                </>
+              ) : (
+                <Text
+                  style={[styles.input, { color: theme.colors.textTertiary }]}
+                  numberOfLines={1}
+                >
+                  Search for a place...
+                </Text>
+              )}
+            </View>
             <Text style={styles.chevron}>›</Text>
           </TouchableOpacity>
 

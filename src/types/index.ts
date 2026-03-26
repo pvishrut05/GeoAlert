@@ -32,3 +32,6 @@ export interface AppSettings {
   locationPermission: PermissionStatus;
   notificationPermission: PermissionStatus;
 }
+
+export type { TransitPlace, SelectedPlace, PlaceSource } from './transit';
+
