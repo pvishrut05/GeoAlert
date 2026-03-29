@@ -3,13 +3,13 @@ import {
   View,
   Text,
   FlatList,
+  ActivityIndicator,
   StyleSheet,
   TouchableOpacity,
 } from 'react-native';
-import {PlaceRow} from '../components/PlaceRow';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
-import { ScreenContainer, SearchBar, SectionHeader } from '../components';
+import { ScreenContainer, SearchBar, SectionHeader, PlaceRow } from '../components';
 import {
   searchLocalTransitPlaces,
   searchPlaces,
@@ -24,53 +24,78 @@ type Props = {
   route: RouteProp<RootStackParamList, 'LocationPicker'>;
 };
 
+const EXTERNAL_DEBOUNCE_MS = 400;
+
 export function LocationPickerScreen({ navigation, route }: Props) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SelectedPlace[]>([]);
   const [defaults, setDefaults] = useState<SelectedPlace[]>([]);
-  const [searching, setSearching] = useState(false);
+  const [loadingExternal, setLoadingExternal] = useState(false);
+
+  // Refs for debounce and abort
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   const onSelect = (route.params as any)?.onSelect;
 
-  // Load default stations on mount
   useEffect(() => {
     setDefaults(getDefaultStations());
   }, []);
 
-  // Debounced search
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      abortRef.current?.abort();
+    };
+  }, []);
+
   const handleSearch = useCallback((text: string) => {
     setQuery(text);
 
+    // Cancel any pending external request
     if (debounceRef.current) clearTimeout(debounceRef.current);
+    abortRef.current?.abort();
 
     const q = text.trim();
     if (q.length < 1) {
       setResults([]);
-      setSearching(false);
+      setLoadingExternal(false);
       return;
     }
 
-    // Instant local search (synchronous, fast)
+    // Instant local search (synchronous)
     const localResults = searchLocalTransitPlaces(q);
     setResults(localResults);
 
-    // Debounced async search for external fallback
-    if (localResults.length < 3 && q.length >= 2) {
-      setSearching(true);
+    // Debounced external fallback — only when local is weak
+    if (q.length >= 3 && localResults.length < 5) {
+      setLoadingExternal(true);
+      const controller = new AbortController();
+      abortRef.current = controller;
+
       debounceRef.current = setTimeout(async () => {
-        const merged = await searchPlaces(q);
-        setResults(merged);
-        setSearching(false);
-      }, 300);
+        try {
+          const merged = await searchPlaces(q, controller.signal);
+          if (!controller.signal.aborted) {
+            setResults(merged);
+          }
+        } catch {
+          // swallow — stale or failed
+        } finally {
+          if (!controller.signal.aborted) {
+            setLoadingExternal(false);
+          }
+        }
+      }, EXTERNAL_DEBOUNCE_MS);
+    } else {
+      setLoadingExternal(false);
     }
   }, []);
 
   const handleSelect = useCallback(
     (place: SelectedPlace) => {
-      if (onSelect) {
-        onSelect(place);
-      }
+      if (onSelect) onSelect(place);
       navigation.goBack();
     },
     [navigation, onSelect]
@@ -78,10 +103,9 @@ export function LocationPickerScreen({ navigation, route }: Props) {
 
   const hasQuery = query.trim().length >= 1;
   const displayData = hasQuery ? results : defaults;
+
   const sectionTitle = hasQuery
-    ? results.length > 0
-      ? 'Stations'
-      : ''
+    ? results.length > 0 ? 'Results' : ''
     : 'Popular Stations';
 
   return (
@@ -99,12 +123,23 @@ export function LocationPickerScreen({ navigation, route }: Props) {
       <SearchBar
         value={query}
         onChangeText={handleSearch}
-        placeholder="Station name, line, or city..."
+        placeholder="Station name, line, or place..."
         autoFocus
       />
 
-      {/* Section header */}
-      {sectionTitle ? <SectionHeader title={sectionTitle} /> : null}
+      {/* Section header with loading indicator */}
+      {sectionTitle ? (
+        <View style={styles.sectionRow}>
+          <SectionHeader title={sectionTitle} />
+          {loadingExternal && (
+            <ActivityIndicator
+              size="small"
+              color={theme.colors.textTertiary}
+              style={styles.loadingIndicator}
+            />
+          )}
+        </View>
+      ) : null}
 
       {/* Results */}
       <FlatList
@@ -123,15 +158,20 @@ export function LocationPickerScreen({ navigation, route }: Props) {
         ListEmptyComponent={
           hasQuery ? (
             <View style={styles.emptyContainer}>
-              {searching ? (
-                <Text style={styles.emptyText}>Searching...</Text>
-              ) : (
-                <>
-                  <Text style={styles.emptyText}>No stations found</Text>
-                  <Text style={styles.emptyHint}>
-                    Try a station name, line code, or city
-                  </Text>
-                </>
+              {loadingExternal ? (
+                <ActivityIndicator
+                  size="small"
+                  color={theme.colors.textSecondary}
+                  style={{ marginBottom: 12 }}
+                />
+              ) : null}
+              <Text style={styles.emptyText}>
+                {loadingExternal ? 'Searching places...' : 'No results found'}
+              </Text>
+              {!loadingExternal && (
+                <Text style={styles.emptyHint}>
+                  Try a station name, line code, or address
+                </Text>
               )}
             </View>
           ) : null
@@ -157,6 +197,14 @@ const styles = StyleSheet.create({
     fontSize: theme.font.size.headline,
     fontWeight: theme.font.weight.semibold,
     color: theme.colors.text,
+  },
+  sectionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  loadingIndicator: {
+    marginLeft: 8,
+    marginBottom: -4,
   },
   list: {
     paddingBottom: theme.spacing.xxxl,

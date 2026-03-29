@@ -1,45 +1,55 @@
-import React from 'react';
+import React, { useCallback } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import Slider from '@react-native-community/slider';
 import { theme } from '../constants';
+import {
+  milesToMeters,
+  metersToMiles,
+  formatRadiusMiles,
+  RADIUS_MIN_MILES,
+  RADIUS_MAX_MILES,
+  RADIUS_STEP_MILES,
+} from '../utils/geo';
 
 interface Props {
+  /** Radius in meters (internal storage unit). */
   value: number;
-  onChange: (value: number) => void;
-  min?: number;
-  max?: number;
-  step?: number;
+  /** Called with new radius in meters. */
+  onChange: (meters: number) => void;
 }
 
-export function RadiusSelector({
-  value,
-  onChange,
-  min = 50,
-  max = 1000,
-  step = 25,
-}: Props) {
-  const formatRadius = (r: number) => (r >= 1000 ? `${(r / 1000).toFixed(1)}km` : `${r}m`);
+export function RadiusSelector({ value, onChange }: Props) {
+  const currentMiles = metersToMiles(value);
+
+  const handleChange = useCallback(
+    (miles: number) => {
+      // Round to step to avoid floating point drift
+      const rounded = Math.round(miles / RADIUS_STEP_MILES) * RADIUS_STEP_MILES;
+      onChange(milesToMeters(rounded));
+    },
+    [onChange]
+  );
 
   return (
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.label}>Radius</Text>
-        <Text style={styles.value}>{formatRadius(value)}</Text>
+        <Text style={styles.value}>{formatRadiusMiles(value)}</Text>
       </View>
       <Slider
         style={styles.slider}
-        minimumValue={min}
-        maximumValue={max}
-        step={step}
-        value={value}
-        onValueChange={onChange}
+        minimumValue={RADIUS_MIN_MILES}
+        maximumValue={RADIUS_MAX_MILES}
+        step={RADIUS_STEP_MILES}
+        value={currentMiles}
+        onValueChange={handleChange}
         minimumTrackTintColor={theme.colors.accent}
         maximumTrackTintColor="rgba(255,255,255,0.08)"
         thumbTintColor="#fff"
       />
       <View style={styles.range}>
-        <Text style={styles.rangeText}>{formatRadius(min)}</Text>
-        <Text style={styles.rangeText}>{formatRadius(max)}</Text>
+        <Text style={styles.rangeText}>{RADIUS_MIN_MILES} mi</Text>
+        <Text style={styles.rangeText}>{RADIUS_MAX_MILES} mi</Text>
       </View>
     </View>
   );

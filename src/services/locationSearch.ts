@@ -1,6 +1,7 @@
 import { chicagoRailPlaces, TransitPlace } from '../data/chicagoRailPlaces';
 import { SelectedPlace } from '../types/transit';
 import { scoreMatch, tiebreaker } from '../utils/search';
+import { searchExternalPlaces as searchExternalPlacesService } from './externalPlaceSearch';
 
 const MAX_RESULTS = 20;
 const MAX_CITY_ONLY_RESULTS = 5; // cap low-quality city-only matches
@@ -78,31 +79,73 @@ export function getDefaultStations(): SelectedPlace[] {
   return results;
 }
 
-// ─── External API Search (stub) ──────────────────────────────────────────────
+// ─── External Fallback ───────────────────────────────────────────────────────
 
-export async function searchExternalPlaces(_query: string): Promise<SelectedPlace[]> {
-  return [];
+// Score threshold: if best local result is at or above this, local results
+// are "strong" and we skip the external API call entirely.
+const STRONG_LOCAL_THRESHOLD = 80; // contains-in-name tier or better
+
+/**
+ * Determine if local results are strong enough to skip external search.
+ */
+function hasStrongLocalMatch(localResults: SelectedPlace[], query: string): boolean {
+  if (localResults.length >= 5) return true;
+  if (localResults.length === 0) return false;
+
+  // Re-score the top result to check quality
+  const top = localResults[0];
+  const topScore = scoreMatch(
+    query,
+    top.label,
+    undefined, // aliases not on SelectedPlace, but name match is enough
+    top.lineCodes,
+    undefined
+  );
+  return topScore >= STRONG_LOCAL_THRESHOLD;
 }
 
 // ─── Unified Search ──────────────────────────────────────────────────────────
 
-export async function searchPlaces(query: string): Promise<SelectedPlace[]> {
+/**
+ * Main search entry point.
+ * Returns local results immediately. Calls external only when local is weak.
+ * Accepts AbortSignal so the caller can cancel stale requests.
+ */
+export async function searchPlaces(
+  query: string,
+  signal?: AbortSignal
+): Promise<SelectedPlace[]> {
   const q = query.trim();
   if (!q) return [];
 
   const localResults = searchLocalTransitPlaces(q);
-  if (localResults.length >= 3) return localResults;
 
-  const externalResults = await searchExternalPlaces(q);
-  const seen = new Set(localResults.map((r) => r.id));
-  const merged = [...localResults];
-  for (const ext of externalResults) {
-    if (!seen.has(ext.id)) {
-      merged.push(ext);
-      seen.add(ext.id);
-    }
+  // Skip external if local results are strong enough
+  if (hasStrongLocalMatch(localResults, q)) {
+    return localResults;
   }
-  return merged.slice(0, MAX_RESULTS);
+
+  // Only hit external for queries >= 3 chars to avoid noise
+  if (q.length < 3) return localResults;
+
+  try {
+    const externalResults = await searchExternalPlacesService(q, signal);
+    if (signal?.aborted) return localResults;
+
+    // Merge: local first, then external (deduped by id)
+    const seen = new Set(localResults.map((r) => r.id));
+    const merged = [...localResults];
+    for (const ext of externalResults) {
+      if (!seen.has(ext.id)) {
+        merged.push(ext);
+        seen.add(ext.id);
+      }
+    }
+    return merged.slice(0, MAX_RESULTS);
+  } catch {
+    // External failed — degrade gracefully to local-only
+    return localResults;
+  }
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────

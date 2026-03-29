@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, Switch, TouchableOpacity, StyleSheet } from 'react-native';
 import { Alarm } from '../types';
 import { theme } from '../constants';
+import { formatRadiusMiles } from '../utils/geo';
 
 interface Props {
   alarm: Alarm;
@@ -26,7 +27,7 @@ export function AlarmRow({ alarm, onToggle, onPress, isLast }: Props) {
             {alarm.triggerType === 'arriving' ? 'Arriving' : 'Leaving'}
           </Text>
           {'  ·  '}
-          {alarm.radius}m
+          {formatRadiusMiles(alarm.radius)}
           {alarm.address ? `  ·  ${alarm.address}` : ''}
         </Text>
       </View>

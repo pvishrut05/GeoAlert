@@ -69,7 +69,7 @@ export const seedAlarms: Alarm[] = [
     address: 'Union Station, Chicago, IL',
     latitude: 41.8786,
     longitude: -87.6402,
-    radius: 50,
+    radius: 161, // ~0.1 mi
     triggerType: 'arriving',
     sound: 'radar',
     vibrationEnabled: true,
@@ -84,7 +84,7 @@ export const seedAlarms: Alarm[] = [
     address: 'Brooklyn Heights, Brooklyn',
     latitude: 40.6961,
     longitude: -73.9936,
-    radius: 150,
+    radius: 241, // ~0.15 mi
     triggerType: 'arriving',
     sound: 'radar',
     vibrationEnabled: true,
@@ -99,7 +99,7 @@ export const seedAlarms: Alarm[] = [
     address: 'Hudson Yards, Manhattan',
     latitude: 40.7536,
     longitude: -74.0003,
-    radius: 300,
+    radius: 322, // ~0.2 mi
     triggerType: 'leaving',
     sound: 'radar',
     vibrationEnabled: false,
@@ -114,7 +114,7 @@ export const seedAlarms: Alarm[] = [
     address: 'JFK Airport, Terminal 4',
     latitude: 40.6413,
     longitude: -73.7781,
-    radius: 500,
+    radius: 805, // ~0.5 mi
     triggerType: 'arriving',
     sound: 'radar',
     vibrationEnabled: true,
@@ -127,7 +127,7 @@ export const seedAlarms: Alarm[] = [
 // ─── Default Settings ────────────────────────────────────────────────────────
 
 export const defaultSettings: AppSettings = {
-  defaultRadius: 200,
+  defaultRadius: 161, // ~0.1 mi in meters
   defaultSound: 'radar',
   vibrationEnabled: true,
   locationPermission: 'undetermined',

@@ -17,5 +17,6 @@ export interface SelectedPlace {
   mode?: 'rail' | 'bus';
   kind?: 'station' | 'stop';
   sourceStopId?: string;
+  sourcePlaceId?: string; // external API place ID (e.g. Google place_id)
   lineCodes?: string[];
 }

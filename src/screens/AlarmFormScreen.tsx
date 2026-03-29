@@ -20,9 +20,11 @@ import {
   SettingRow,
   PrimaryButton,
 } from '../components';
+import { RadiusMapPreview } from '../components/RadiusMapPreview';
 import { useAlarmStore } from '../store';
 import { theme, soundOptions } from '../constants';
 import { RootStackParamList } from '../navigation/types';
+import { RADIUS_DEFAULT_METERS } from '../utils/geo';
 
 type AddProps = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'AddAlarm'>;
@@ -56,16 +58,19 @@ export function AlarmFormScreen(props: Props) {
   const [label, setLabel] = useState(existingAlarm?.label ?? '');
   const [locationName, setLocationName] = useState(existingAlarm?.locationName ?? '');
   const [address, setAddress] = useState(existingAlarm?.address ?? '');
-  const [latitude, setLatitude] = useState(existingAlarm?.latitude ?? 41.8786);
-  const [longitude, setLongitude] = useState(existingAlarm?.longitude ?? -87.6402);
+  const [latitude, setLatitude] = useState(existingAlarm?.latitude ?? 0);
+  const [longitude, setLongitude] = useState(existingAlarm?.longitude ?? 0);
   const [triggerType, setTriggerType] = useState<'arriving' | 'leaving'>(
     existingAlarm?.triggerType ?? 'arriving'
   );
-  const [radius, setRadius] = useState(existingAlarm?.radius ?? 200);
+  const [radius, setRadius] = useState(existingAlarm?.radius ?? RADIUS_DEFAULT_METERS);
   const [sound, setSound] = useState(existingAlarm?.sound ?? 'radar');
   const [vibrationEnabled, setVibrationEnabled] = useState(
     existingAlarm?.vibrationEnabled ?? true
   );
+
+  // Track whether user has picked a location (for new alarms, starts false)
+  const hasLocation = locationName.length > 0 && (latitude !== 0 || longitude !== 0);
 
   const isValid = useMemo(() => label.trim().length > 0, [label]);
 
@@ -116,13 +121,11 @@ export function AlarmFormScreen(props: Props) {
   const handleLocationPick = useCallback(() => {
     navigation.navigate('LocationPicker', {
       onSelect: (result: any) => {
-        // SelectedPlace uses 'label' and 'locationName'
         const name = result.locationName || result.label || result.name || '';
         setLocationName(name);
         setAddress(result.address || '');
         setLatitude(result.latitude);
         setLongitude(result.longitude);
-        // Auto-fill label if empty
         if (!label.trim() && name) {
           setLabel(name);
         }
@@ -185,14 +188,7 @@ export function AlarmFormScreen(props: Props) {
                     {locationName}
                   </Text>
                   {!!address && (
-                    <Text
-                      style={{
-                        fontSize: theme.font.size.caption,
-                        color: theme.colors.textSecondary,
-                        marginTop: 2,
-                      }}
-                      numberOfLines={1}
-                    >
+                    <Text style={styles.addressText} numberOfLines={1}>
                       {address}
                     </Text>
                   )}
@@ -208,6 +204,17 @@ export function AlarmFormScreen(props: Props) {
             </View>
             <Text style={styles.chevron}>›</Text>
           </TouchableOpacity>
+
+          {/* Map Preview — only shown after a location is selected */}
+          {hasLocation && (
+            <View style={styles.mapPreviewWrapper}>
+              <RadiusMapPreview
+                latitude={latitude}
+                longitude={longitude}
+                radiusMeters={radius}
+              />
+            </View>
+          )}
 
           {/* Trigger When */}
           <SectionHeader title="Trigger When" />
@@ -320,10 +327,18 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
     paddingVertical: 12,
   },
+  addressText: {
+    fontSize: theme.font.size.caption,
+    color: theme.colors.textSecondary,
+    marginTop: 2,
+  },
   chevron: {
     fontSize: 22,
     color: theme.colors.textSecondary,
     marginLeft: 8,
+  },
+  mapPreviewWrapper: {
+    marginTop: theme.spacing.md,
   },
   segmentWrapper: {
     paddingHorizontal: theme.spacing.xl,

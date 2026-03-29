@@ -8,6 +8,7 @@
     "splash": {
       "backgroundColor": "#000000"
     },
+    "newArchEnabled": true,
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.geoalarm.app",
@@ -30,6 +31,9 @@
         "ACCESS_COARSE_LOCATION",
         "ACCESS_BACKGROUND_LOCATION"
       ]
+    },
+    "extra":{
+      "mapboxAccessToken": "YOUR_MAPBOX_ACCESS_TOKEN"
     },
     "plugins": [
       [
